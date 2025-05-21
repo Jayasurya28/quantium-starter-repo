@@ -1,61 +1,92 @@
 import pandas as pd
-import dash
-from dash import html, dcc
+import datetime
 import plotly.express as px
+from dash import Dash, html, dcc, Input, Output
 
-# Load the processed sales data
-df = pd.read_csv('processed_sales_data.csv')
+# Load data
+df = pd.read_csv("processed_sales_data.csv", parse_dates=["date"])
 
-# Convert date to datetime for proper sorting
-df['date'] = pd.to_datetime(df['date'])
+# Initialize Dash app
+app = Dash(__name__)
+app.title = "Pink Morsel Sales Dashboard"
 
-# Sort by date
-df = df.sort_values(by='date')
+# Define app layout
+app.layout = html.Div(
+    children=[
+        html.H1("Pink Morsel Sales Visualiser", style={
+            'textAlign': 'center',
+            'color': '#800080',
+            'marginBottom': '30px'
+        }),
 
-# Group by date to get daily total sales
-daily_sales = df.groupby('date').sum(numeric_only=True).reset_index()
+        html.Div([
+            html.Label("Select a Region:", style={
+                'fontWeight': 'bold',
+                'marginRight': '15px',
+                'color': '#333'
+            }),
+            dcc.RadioItems(
+                id='region-selector',
+                options=[
+                    {'label': 'All', 'value': 'all'},
+                    {'label': 'North', 'value': 'north'},
+                    {'label': 'East', 'value': 'east'},
+                    {'label': 'South', 'value': 'south'},
+                    {'label': 'West', 'value': 'west'}
+                ],
+                value='all',
+                labelStyle={'display': 'inline-block', 'marginRight': '10px'}
+            )
+        ], style={'textAlign': 'center', 'marginBottom': '20px'}),
 
-# Create a line chart
-fig = px.line(
-    daily_sales,
-    x='date',
-    y='sales',
-    title='Daily Pink Morsel Sales Over Time',
-    labels={'sales': 'Total Sales ($)', 'date': 'Date'}
+        dcc.Graph(id='sales-line-chart')
+    ],
+    style={'fontFamily': 'Arial', 'padding': '20px', 'backgroundColor': '#f0f8ff'}
 )
 
-# Highlight price change date
-fig.add_shape(
-    type="line",
-    x0=pd.to_datetime('2021-01-15'),
-    x1=pd.to_datetime('2021-01-15'),
-    y0=0,
-    y1=1,
-    yref="paper",
-    line=dict(
-        color="red",
-        width=2,
-        dash="dash",
+# Callback to update chart based on selected region
+@app.callback(
+    Output('sales-line-chart', 'figure'),
+    [Input('region-selector', 'value')]
+)
+def update_chart(selected_region):
+    # Filter data
+    if selected_region == 'all':
+        filtered_df = df
+    else:
+        filtered_df = df[df['region'] == selected_region]
+
+    # Group by date
+    daily_sales = filtered_df.groupby("date", as_index=False)["sales"].sum()
+
+    # Create figure
+    fig = px.line(
+        daily_sales,
+        x="date",
+        y="sales",
+        title=f"Pink Morsel Sales Over Time - {selected_region.capitalize()} Region" if selected_region != 'all' else "Pink Morsel Sales Over Time - All Regions",
+        labels={"date": "Date", "sales": "Total Sales ($)"}
     )
-)
 
-fig.add_annotation(
-    x=pd.to_datetime('2021-01-15'),
-    y=1,
-    yref="paper",
-    text="Price Increase",
-    showarrow=False,
-    yshift=10
-)
+    # Add vertical line for price change
+    fig.add_vline(
+        x=datetime.datetime(2021, 1, 15),
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Price Increase",
+        annotation_position="top left"
+    )
 
-# Build Dash app
-app = dash.Dash(__name__)
-app.title = "Pink Morsel Sales Visualiser"
+    fig.update_layout(
+        plot_bgcolor="#fffafa",
+        paper_bgcolor="#fffafa",
+        font_color="#333",
+        title_font_size=20,
+        title_x=0.5
+    )
 
-app.layout = html.Div(children=[
-    html.H1("Pink Morsel Sales Visualiser", style={'textAlign': 'center'}),
-    dcc.Graph(figure=fig)
-])
+    return fig
 
+# Run app
 if __name__ == '__main__':
     app.run(debug=True)
